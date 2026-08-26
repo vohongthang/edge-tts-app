@@ -30,6 +30,7 @@ st.set_page_config(
 # =====================================================================================
 # Key: Tên hiển thị trên giao diện | Value: (voice_id, mô tả ngắn)
 VOICES = {
+    # ---- Tiếng Việt (2 giọng chính thức duy nhất mà Edge-TTS hỗ trợ) ----
     "🇻🇳 Nam Minh - Nam (Miền Bắc)": {
         "id": "vi-VN-NamMinhNeural",
         "desc": "Giọng nam miền Bắc, trầm ấm, chuẩn mực. Phù hợp: Bản tin, Bất động sản, Doanh nghiệp.",
@@ -38,13 +39,55 @@ VOICES = {
         "id": "vi-VN-HoaiMyNeural",
         "desc": "Giọng nữ miền Bắc, truyền cảm, nhẹ nhàng. Phù hợp: Phóng sự, Review, Storytelling.",
     },
-    "🇺🇸 Jenny - Female (US English)": {
+    # ---- Tiếng Anh - Mỹ (US English) ----
+    "🇺🇸 Jenny - Nữ, thân thiện": {
         "id": "en-US-JennyNeural",
-        "desc": "Giọng nữ tiếng Anh Mỹ chuẩn, tự nhiên. Phù hợp: Nội dung tiếng Anh, E-learning.",
+        "desc": "Giọng nữ tiếng Anh Mỹ chuẩn, tự nhiên, thân thiện. Phù hợp: Nội dung chung, E-learning.",
     },
-    "🇺🇸 Guy - Male (US English)": {
+    "🇺🇸 Guy - Nam, mạnh mẽ": {
         "id": "en-US-GuyNeural",
-        "desc": "Giọng nam tiếng Anh Mỹ, rõ ràng, chuyên nghiệp. Phù hợp: Thuyết trình, Quảng cáo tiếng Anh.",
+        "desc": "Giọng nam tiếng Anh Mỹ, rõ ràng, mạnh mẽ. Phù hợp: Thuyết trình, Quảng cáo.",
+    },
+    "🇺🇸 Aria - Nữ, ấm áp đa năng": {
+        "id": "en-US-AriaNeural",
+        "desc": "Giọng nữ tiếng Anh Mỹ ấm áp, biểu cảm tự nhiên. Phù hợp: Review, Storytelling, Quảng cáo.",
+    },
+    "🇺🇸 Christopher - Nam, trầm ổn trọng": {
+        "id": "en-US-ChristopherNeural",
+        "desc": "Giọng nam trầm, uy tín, đáng tin cậy. Phù hợp: Tin tức, Doanh nghiệp, Giáo dục.",
+    },
+    "🇺🇸 Eric - Nam, điềm đạm rõ ràng": {
+        "id": "en-US-EricNeural",
+        "desc": "Giọng nam điềm đạm, phát âm rõ ràng. Phù hợp: E-learning, Hướng dẫn, Tutorial.",
+    },
+    "🇺🇸 Michelle - Nữ, chuyên nghiệp": {
+        "id": "en-US-MichelleNeural",
+        "desc": "Giọng nữ chuyên nghiệp, sắc sảo. Phù hợp: Doanh nghiệp, Thuyết trình, Tin tức.",
+    },
+    "🇺🇸 Roger - Nam, ấm áp từng trải": {
+        "id": "en-US-RogerNeural",
+        "desc": "Giọng nam lớn tuổi hơn, ấm áp, từng trải. Phù hợp: Kể chuyện, Audiobook, Podcast.",
+    },
+    "🇺🇸 Ana - Nữ, giọng trẻ em": {
+        "id": "en-US-AnaNeural",
+        "desc": "Giọng bé gái trong trẻo. Phù hợp: Nội dung thiếu nhi, Giáo dục mầm non.",
+    },
+    "🇺🇸 Andrew (Multilingual) - Nam, tự nhiên": {
+        "id": "en-US-AndrewMultilingualNeural",
+        "desc": "Giọng nam đa ngôn ngữ, tự nhiên như hội thoại đời thực. Phù hợp: Podcast, MC sự kiện, Kể chuyện.",
+    },
+    "🇺🇸 Ava (Multilingual) - Nữ, biểu cảm": {
+        "id": "en-US-AvaMultilingualNeural",
+        "desc": "Giọng nữ đa ngôn ngữ, biểu cảm sống động. Phù hợp: Quảng cáo, Review, Nội dung sáng tạo.",
+    },
+    # ---- Tiếng Anh - Anh (UK English) ----
+    "🇬🇧 Sonia - Nữ, thanh lịch Anh-Anh": {
+        "id": "en-GB-SoniaNeural",
+        "desc": "Giọng nữ Anh-Anh thanh lịch, sang trọng. Phù hợp: Bất động sản cao cấp, Quảng cáo premium.",
+    },
+    "🇬🇧 Ryan - Nam, lịch lãm Anh-Anh": {
+        "id": "en-GB-RyanNeural",
+        "desc": "Giọng nam Anh-Anh lịch lãm, chững chạc. Phù hợp: Doanh nghiệp, MC sự kiện, Quảng cáo premium.",
     },
 }
 
@@ -60,6 +103,10 @@ TOPIC_OPTIONS = [
     "🏢 Bất Động Sản (Sang trọng / Thôi thúc)",
     "📰 Tin Tức / Phóng Sự",
     "📖 Review / Kể Chuyện",
+    "📢 Quảng Cáo / Giới Thiệu Sản Phẩm",
+    "🎓 Giáo Dục / E-Learning",
+    "🎧 Podcast / Truyện Audio",
+    "💍 MC Sự Kiện / Đám Cưới",
     "✍️ Tự nhập văn bản tự do",
 ]
 
@@ -158,6 +205,88 @@ CURATED_SCRIPTS = {
         "Nếu bạn cũng đang tìm kiếm một nơi để trở về sau ngày dài mệt mỏi, tôi nghĩ khu đô thị ven "
         "sông Hương này rất xứng đáng để bạn dành thời gian ghé thăm và trải nghiệm."
     ),
+    ("📢 Quảng Cáo / Giới Thiệu Sản Phẩm", "Nghệ An (TP Vinh)"): (
+        "Bạn đang tìm kiếm một sản phẩm chất lượng, được hàng ngàn khách hàng tin dùng tại thành "
+        "phố Vinh? Xin giới thiệu đến quý khách bộ sản phẩm mới nhất, được nghiên cứu và phát triển "
+        "dành riêng cho người tiêu dùng xứ Nghệ.\n\n"
+        "Với chất lượng vượt trội, thiết kế tinh tế cùng mức giá vô cùng hợp lý, sản phẩm của chúng "
+        "tôi cam kết mang đến sự hài lòng tuyệt đối ngay từ lần sử dụng đầu tiên.\n\n"
+        "Nhân dịp khai trương chi nhánh mới tại thành phố Vinh, chúng tôi dành tặng ưu đãi giảm giá "
+        "đặc biệt lên đến ba mươi phần trăm cho một trăm khách hàng đặt mua sớm nhất.\n\n"
+        "Đừng bỏ lỡ cơ hội này! Quý khách vui lòng liên hệ ngay hotline, hoặc Zalo không không chín "
+        "bảy bảy, sáu tám bảy, hai hai bảy để được tư vấn miễn phí và nhận ưu đãi ngay hôm nay."
+    ),
+    ("📢 Quảng Cáo / Giới Thiệu Sản Phẩm", "Huế (Cố đô)"): (
+        "Bạn đang tìm kiếm một sản phẩm chất lượng, được hàng ngàn khách hàng tin dùng tại cố đô "
+        "Huế? Xin giới thiệu đến quý khách bộ sản phẩm mới nhất, được nghiên cứu và phát triển dành "
+        "riêng cho người tiêu dùng xứ Huế.\n\n"
+        "Với chất lượng vượt trội, thiết kế tinh tế cùng mức giá vô cùng hợp lý, sản phẩm của chúng "
+        "tôi cam kết mang đến sự hài lòng tuyệt đối ngay từ lần sử dụng đầu tiên.\n\n"
+        "Nhân dịp khai trương chi nhánh mới tại thành phố Huế, chúng tôi dành tặng ưu đãi giảm giá "
+        "đặc biệt lên đến ba mươi phần trăm cho một trăm khách hàng đặt mua sớm nhất.\n\n"
+        "Đừng bỏ lỡ cơ hội này! Quý khách vui lòng liên hệ ngay hotline, hoặc Zalo không không chín "
+        "bảy bảy, sáu tám bảy, hai hai bảy để được tư vấn miễn phí và nhận ưu đãi ngay hôm nay."
+    ),
+    ("🎓 Giáo Dục / E-Learning", "Nghệ An (TP Vinh)"): (
+        "Chào mừng các bạn học viên đã đến với bài học hôm nay, được thực hiện bởi đội ngũ giảng "
+        "viên giàu kinh nghiệm tại trung tâm đào tạo thành phố Vinh.\n\n"
+        "Trong bài học này, chúng ta sẽ cùng nhau tìm hiểu những kiến thức nền tảng quan trọng, được "
+        "trình bày một cách dễ hiểu, có ví dụ minh họa cụ thể, giúp các bạn nắm vững nội dung chỉ sau "
+        "một buổi học.\n\n"
+        "Hãy chuẩn bị giấy bút, tập trung theo dõi bài giảng, và đừng ngần ngại ghi lại những câu "
+        "hỏi để chúng ta cùng thảo luận ở phần cuối bài học.\n\n"
+        "Bây giờ, chúng ta hãy cùng bắt đầu bài học đầu tiên nhé!"
+    ),
+    ("🎓 Giáo Dục / E-Learning", "Huế (Cố đô)"): (
+        "Chào mừng các bạn học viên đã đến với bài học hôm nay, được thực hiện bởi đội ngũ giảng "
+        "viên giàu kinh nghiệm tại trung tâm đào tạo thành phố Huế.\n\n"
+        "Trong bài học này, chúng ta sẽ cùng nhau tìm hiểu những kiến thức nền tảng quan trọng, được "
+        "trình bày một cách dễ hiểu, có ví dụ minh họa cụ thể, giúp các bạn nắm vững nội dung chỉ sau "
+        "một buổi học.\n\n"
+        "Hãy chuẩn bị giấy bút, tập trung theo dõi bài giảng, và đừng ngần ngại ghi lại những câu "
+        "hỏi để chúng ta cùng thảo luận ở phần cuối bài học.\n\n"
+        "Bây giờ, chúng ta hãy cùng bắt đầu bài học đầu tiên nhé!"
+    ),
+    ("🎧 Podcast / Truyện Audio", "Nghệ An (TP Vinh)"): (
+        "Xin chào tất cả các bạn, chào mừng các bạn đã quay trở lại với podcast của chúng tôi, nơi "
+        "mỗi tuần chúng ta cùng nhau trò chuyện về những câu chuyện đời thường thật gần gũi.\n\n"
+        "Số phát sóng hôm nay, mình muốn kể cho các bạn nghe về một buổi chiều lang thang dọc bờ "
+        "sông Lam, thành phố Vinh - nơi mình tình cờ gặp gỡ những con người bình dị nhưng mang trong "
+        "mình biết bao câu chuyện thú vị.\n\n"
+        "Nếu các bạn cũng có những kỷ niệm đáng nhớ về mảnh đất xứ Nghệ, đừng ngần ngại để lại bình "
+        "luận, mình rất mong được lắng nghe câu chuyện của các bạn.\n\n"
+        "Cảm ơn các bạn đã lắng nghe, hẹn gặp lại trong số phát sóng tuần sau!"
+    ),
+    ("🎧 Podcast / Truyện Audio", "Huế (Cố đô)"): (
+        "Xin chào tất cả các bạn, chào mừng các bạn đã quay trở lại với podcast của chúng tôi, nơi "
+        "mỗi tuần chúng ta cùng nhau trò chuyện về những câu chuyện đời thường thật gần gũi.\n\n"
+        "Số phát sóng hôm nay, mình muốn kể cho các bạn nghe về một buổi chiều lang thang dọc bờ "
+        "sông Hương, cố đô Huế - nơi mình tình cờ gặp gỡ những con người bình dị nhưng mang trong "
+        "mình biết bao câu chuyện thú vị.\n\n"
+        "Nếu các bạn cũng có những kỷ niệm đáng nhớ về mảnh đất xứ Huế mộng mơ, đừng ngần ngại để "
+        "lại bình luận, mình rất mong được lắng nghe câu chuyện của các bạn.\n\n"
+        "Cảm ơn các bạn đã lắng nghe, hẹn gặp lại trong số phát sóng tuần sau!"
+    ),
+    ("💍 MC Sự Kiện / Đám Cưới", "Nghệ An (TP Vinh)"): (
+        "Kính thưa quý vị quan khách, cô dâu chú rể cùng toàn thể gia đình hai họ! Trong không khí "
+        "ấm áp và hạnh phúc tại thành phố Vinh hôm nay, chúng ta cùng nhau hội tụ để chứng kiến "
+        "khoảnh khắc thiêng liêng - lễ thành hôn của đôi uyên ương.\n\n"
+        "Xin một tràng pháo tay thật lớn để chào đón sự xuất hiện của cô dâu và chú rể trong ngày "
+        "trọng đại nhất cuộc đời!\n\n"
+        "Tình yêu của hai bạn đã vượt qua bao thử thách để đơm hoa kết trái, và hôm nay, trước sự "
+        "chứng kiến của gia đình, bạn bè, hai bạn chính thức về chung một nhà.\n\n"
+        "Xin chúc cô dâu chú rể trăm năm hạnh phúc, bạc đầu răng long, sớm sinh quý tử!"
+    ),
+    ("💍 MC Sự Kiện / Đám Cưới", "Huế (Cố đô)"): (
+        "Kính thưa quý vị quan khách, cô dâu chú rể cùng toàn thể gia đình hai họ! Trong không khí "
+        "ấm áp và hạnh phúc giữa lòng cố đô Huế hôm nay, chúng ta cùng nhau hội tụ để chứng kiến "
+        "khoảnh khắc thiêng liêng - lễ thành hôn của đôi uyên ương.\n\n"
+        "Xin một tràng pháo tay thật lớn để chào đón sự xuất hiện của cô dâu và chú rể trong ngày "
+        "trọng đại nhất cuộc đời!\n\n"
+        "Tình yêu của hai bạn đã vượt qua bao thử thách để đơm hoa kết trái, và hôm nay, trước sự "
+        "chứng kiến của gia đình, bạn bè, hai bạn chính thức về chung một nhà.\n\n"
+        "Xin chúc cô dâu chú rể trăm năm hạnh phúc, bạc đầu răng long, sớm sinh quý tử!"
+    ),
 }
 
 
@@ -196,18 +325,65 @@ def _build_generic_script(topic_label: str, region_label: str) -> str:
             f"Chương trình chuyển động đô thị đến đây xin tạm dừng. Xin kính chào và hẹn gặp lại quý "
             f"vị trong những bản tin tiếp theo."
         )
-    # Review / Kể chuyện
+    if topic_label.startswith("📖"):
+        return (
+            f"Có một buổi chiều, tôi tình cờ ghé qua khu dân cư ven {river}, và cảm giác đầu tiên khi "
+            f"bước chân xuống xe là một sự bình yên đến lạ.\n\n"
+            f"Gió từ sông thổi vào mát rượi, xa xa là hàng cây xanh rợp bóng chạy dọc theo bờ kè, tiếng "
+            f"trẻ con nô đùa trong công viên nội khu khiến tôi bất giác mỉm cười. Không gian sống nơi "
+            f"đây thực sự khác biệt so với sự ồn ào, ngột ngạt của phố thị mà tôi vẫn quen thuộc mỗi "
+            f"ngày.\n\n"
+            f"Ngồi nhâm nhi ly cà phê ven sông, ngắm hoàng hôn buông xuống mặt nước lấp lánh, tôi chợt "
+            f"nhận ra đây chính xác là hình ảnh chốn an cư mà bao người vẫn hằng mơ ước.\n\n"
+            f"Nếu bạn cũng đang tìm kiếm một nơi để trở về sau ngày dài mệt mỏi, tôi nghĩ khu đô thị "
+            f"ven {river} này tại {city} rất xứng đáng để bạn dành thời gian ghé thăm và trải nghiệm."
+        )
+    if topic_label.startswith("📢"):
+        return (
+            f"Bạn đang tìm kiếm một sản phẩm chất lượng, được hàng ngàn khách hàng tin dùng tại "
+            f"{city}? Xin giới thiệu đến quý khách bộ sản phẩm mới nhất, được nghiên cứu và phát "
+            f"triển dành riêng cho người tiêu dùng tại khu vực.\n\n"
+            f"Với chất lượng vượt trội, thiết kế tinh tế cùng mức giá vô cùng hợp lý, sản phẩm của "
+            f"chúng tôi cam kết mang đến sự hài lòng tuyệt đối ngay từ lần sử dụng đầu tiên.\n\n"
+            f"Nhân dịp khai trương chi nhánh mới tại {city}, chúng tôi dành tặng ưu đãi giảm giá đặc "
+            f"biệt lên đến ba mươi phần trăm cho một trăm khách hàng đặt mua sớm nhất.\n\n"
+            f"Đừng bỏ lỡ cơ hội này! Quý khách vui lòng liên hệ ngay hotline, hoặc Zalo không không "
+            f"chín bảy bảy, sáu tám bảy, hai hai bảy để được tư vấn miễn phí và nhận ưu đãi ngay "
+            f"hôm nay."
+        )
+    if topic_label.startswith("🎓"):
+        return (
+            f"Chào mừng các bạn học viên đã đến với bài học hôm nay, được thực hiện bởi đội ngũ "
+            f"giảng viên giàu kinh nghiệm tại trung tâm đào tạo {city}.\n\n"
+            f"Trong bài học này, chúng ta sẽ cùng nhau tìm hiểu những kiến thức nền tảng quan trọng, "
+            f"được trình bày một cách dễ hiểu, có ví dụ minh họa cụ thể, giúp các bạn nắm vững nội "
+            f"dung chỉ sau một buổi học.\n\n"
+            f"Hãy chuẩn bị giấy bút, tập trung theo dõi bài giảng, và đừng ngần ngại ghi lại những "
+            f"câu hỏi để chúng ta cùng thảo luận ở phần cuối bài học.\n\n"
+            f"Bây giờ, chúng ta hãy cùng bắt đầu bài học đầu tiên nhé!"
+        )
+    if topic_label.startswith("🎧"):
+        return (
+            f"Xin chào tất cả các bạn, chào mừng các bạn đã quay trở lại với podcast của chúng tôi, "
+            f"nơi mỗi tuần chúng ta cùng nhau trò chuyện về những câu chuyện đời thường thật gần "
+            f"gũi.\n\n"
+            f"Số phát sóng hôm nay, mình muốn kể cho các bạn nghe về một buổi chiều lang thang dọc "
+            f"{river}, {city} - nơi mình tình cờ gặp gỡ những con người bình dị nhưng mang trong "
+            f"mình biết bao câu chuyện thú vị.\n\n"
+            f"Nếu các bạn cũng có những kỷ niệm đáng nhớ về mảnh đất này, đừng ngần ngại để lại bình "
+            f"luận, mình rất mong được lắng nghe câu chuyện của các bạn.\n\n"
+            f"Cảm ơn các bạn đã lắng nghe, hẹn gặp lại trong số phát sóng tuần sau!"
+        )
+    # MC Sự Kiện / Đám Cưới
     return (
-        f"Có một buổi chiều, tôi tình cờ ghé qua khu dân cư ven {river}, và cảm giác đầu tiên khi "
-        f"bước chân xuống xe là một sự bình yên đến lạ.\n\n"
-        f"Gió từ sông thổi vào mát rượi, xa xa là hàng cây xanh rợp bóng chạy dọc theo bờ kè, tiếng "
-        f"trẻ con nô đùa trong công viên nội khu khiến tôi bất giác mỉm cười. Không gian sống nơi "
-        f"đây thực sự khác biệt so với sự ồn ào, ngột ngạt của phố thị mà tôi vẫn quen thuộc mỗi "
-        f"ngày.\n\n"
-        f"Ngồi nhâm nhi ly cà phê ven sông, ngắm hoàng hôn buông xuống mặt nước lấp lánh, tôi chợt "
-        f"nhận ra đây chính xác là hình ảnh chốn an cư mà bao người vẫn hằng mơ ước.\n\n"
-        f"Nếu bạn cũng đang tìm kiếm một nơi để trở về sau ngày dài mệt mỏi, tôi nghĩ khu đô thị "
-        f"ven {river} này tại {city} rất xứng đáng để bạn dành thời gian ghé thăm và trải nghiệm."
+        f"Kính thưa quý vị quan khách, cô dâu chú rể cùng toàn thể gia đình hai họ! Trong không khí "
+        f"ấm áp và hạnh phúc tại {city} hôm nay, chúng ta cùng nhau hội tụ để chứng kiến khoảnh khắc "
+        f"thiêng liêng - lễ thành hôn của đôi uyên ương.\n\n"
+        f"Xin một tràng pháo tay thật lớn để chào đón sự xuất hiện của cô dâu và chú rể trong ngày "
+        f"trọng đại nhất cuộc đời!\n\n"
+        f"Tình yêu của hai bạn đã vượt qua bao thử thách để đơm hoa kết trái, và hôm nay, trước sự "
+        f"chứng kiến của gia đình, bạn bè, hai bạn chính thức về chung một nhà.\n\n"
+        f"Xin chúc cô dâu chú rể trăm năm hạnh phúc, bạc đầu răng long, sớm sinh quý tử!"
     )
 
 
