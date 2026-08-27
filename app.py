@@ -10,10 +10,12 @@ Chạy ứng dụng:
 
 import asyncio
 import io
+import re
 from datetime import datetime
 
 import edge_tts
 import streamlit as st
+from pydub import AudioSegment
 
 # =====================================================================================
 # 1. CẤU HÌNH TRANG (PAGE CONFIG)
@@ -90,6 +92,14 @@ VOICES = {
         "desc": "Giọng nam Anh-Anh lịch lãm, chững chạc. Phù hợp: Doanh nghiệp, MC sự kiện, Quảng cáo premium.",
     },
 }
+
+# Danh sách giọng tiếng Việt - hiển thị mặc định, ưu tiên hàng đầu trên giao diện.
+# Microsoft/Edge-TTS hiện CHỈ phát hành chính thức 2 giọng tiếng Việt (đã kiểm chứng qua
+# danh sách giọng thực tế của thư viện edge-tts): vi-VN-NamMinhNeural (nam) và
+# vi-VN-HoaiMyNeural (nữ). Đây là giới hạn từ phía Microsoft, ứng dụng không thể tự thêm
+# giọng Việt thứ 3 - nếu Microsoft phát hành thêm, chỉ cần thêm vào dict VOICES phía trên.
+VN_VOICE_KEYS = [k for k in VOICES if k.startswith("🇻🇳")]
+FOREIGN_VOICE_KEYS = [k for k in VOICES if not k.startswith("🇻🇳")]
 
 # =====================================================================================
 # 3. KHO KỊCH BẢN MẪU THEO CHỦ ĐỀ x VÙNG MIỀN (TEMPLATES SELECTOR)
@@ -440,6 +450,77 @@ def generate_voice(text: str, voice_id: str, rate_value: int, pitch_value: int) 
 
 
 # =====================================================================================
+# 4b. CHẾ ĐỘ HỘI THOẠI NHIỀU GIỌNG (2-3 NGƯỜI NÓI CHUYỆN)
+# =====================================================================================
+def parse_dialogue_script(script: str, speaker_names: list) -> list:
+    """
+    Phân tách kịch bản hội thoại thành danh sách các lượt thoại [(tên_người_nói, nội_dung), ...].
+    Mỗi lượt thoại mới bắt đầu bằng một dòng có dạng "Tên người nói: nội dung" - tên phải khớp
+    (không phân biệt hoa/thường) với một trong các tên người nói đã cấu hình. Các dòng tiếp theo
+    không có tiền tố tên hợp lệ sẽ được nối vào lượt thoại hiện tại (cho phép đoạn văn nhiều dòng).
+    """
+    name_lookup = {name.strip().lower(): name for name in speaker_names if name.strip()}
+    turns = []
+    current_speaker = None
+    current_lines = []
+
+    def flush():
+        if current_speaker is not None:
+            text = " ".join(line for line in current_lines if line).strip()
+            if text:
+                turns.append((current_speaker, text))
+
+    for raw_line in script.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        matched = False
+        if ":" in line:
+            prefix, rest = line.split(":", 1)
+            key = prefix.strip().lower()
+            if key in name_lookup:
+                flush()
+                current_speaker = name_lookup[key]
+                current_lines = [rest.strip()]
+                matched = True
+        if not matched:
+            if current_speaker is None:
+                continue  # Dòng đầu tiên không xác định được người nói -> bỏ qua
+            current_lines.append(line)
+
+    flush()
+    return turns
+
+
+def generate_dialogue_audio(
+    turns: list,
+    speaker_voice_map: dict,
+    speaker_pitch_map: dict,
+    rate_value: int,
+    base_pitch_value: int,
+    pause_ms: int = 450,
+) -> bytes:
+    """
+    Tạo giọng đọc cho từng lượt thoại (mỗi lượt dùng giọng + cao độ riêng của người nói đó),
+    sau đó ghép nối tất cả lại thành MỘT file MP3 duy nhất, có khoảng lặng ngắn giữa các lượt
+    để nghe tự nhiên như một cuộc hội thoại thật. Yêu cầu ffmpeg (khai báo trong packages.txt).
+    """
+    combined = AudioSegment.silent(duration=0)
+
+    for speaker, text in turns:
+        voice_id = speaker_voice_map[speaker]
+        total_pitch = base_pitch_value + speaker_pitch_map.get(speaker, 0)
+        total_pitch = max(-50, min(50, total_pitch))  # giữ trong khoảng an toàn
+        segment_bytes = generate_voice(text, voice_id, rate_value, total_pitch)
+        segment = AudioSegment.from_file(io.BytesIO(segment_bytes), format="mp3")
+        combined += segment + AudioSegment.silent(duration=pause_ms)
+
+    buffer = io.BytesIO()
+    combined.export(buffer, format="mp3", bitrate="128k")
+    return buffer.getvalue()
+
+
+# =====================================================================================
 # 5. KHỞI TẠO SESSION STATE
 # =====================================================================================
 DEFAULT_TOPIC_KEY = "🏢 Bất Động Sản (Sang trọng / Thôi thúc)"
@@ -464,6 +545,14 @@ def _apply_template():
     st.session_state.audio_bytes = None
 
 
+def _on_toggle_foreign_voices():
+    """Callback: khi tắt hiển thị giọng nước ngoài, tự động đưa lựa chọn về giọng Việt
+    nếu đang chọn một giọng nước ngoài (tránh lỗi giọng đang chọn không còn trong danh sách)."""
+    if not st.session_state.get("show_foreign_voices", False):
+        if st.session_state.get("voice_choice") not in VN_VOICE_KEYS:
+            st.session_state.voice_choice = VN_VOICE_KEYS[0]
+
+
 # =====================================================================================
 # 6. GIAO DIỆN CHÍNH (UI LAYOUT)
 # =====================================================================================
@@ -472,143 +561,299 @@ st.caption(
     "Chuyển văn bản thành giọng nói tự nhiên bằng công nghệ Edge-TTS của Microsoft - "
     "Miễn phí 100%, không giới hạn, không cần API key."
 )
+
+app_mode = st.radio(
+    "🎬 Chế độ tạo giọng đọc",
+    options=["🗣️ Một giọng (Đơn)", "👥 Hội thoại nhiều giọng (2-3 người)"],
+    horizontal=True,
+    key="app_mode",
+)
 st.divider()
 
-col_settings, col_content = st.columns([1, 2], gap="large")
+# =====================================================================================
+# CHẾ ĐỘ 1: MỘT GIỌNG (ĐƠN)
+# =====================================================================================
+if app_mode == "🗣️ Một giọng (Đơn)":
+    col_settings, col_content = st.columns([1, 2], gap="large")
 
-# ---------------------------- CỘT TRÁI: CẤU HÌNH ----------------------------
-with col_settings:
-    st.subheader("⚙️ Cấu Hình Giọng Đọc")
+    # ---------------------------- CỘT TRÁI: CẤU HÌNH ----------------------------
+    with col_settings:
+        st.subheader("⚙️ Cấu Hình Giọng Đọc")
 
-    voice_label = st.selectbox(
-        "🎤 Chọn giọng đọc",
-        options=list(VOICES.keys()),
-        key="voice_choice",
-        help="Chọn giọng đọc phù hợp với chủ đề nội dung của bạn.",
-    )
-    voice_info = VOICES[voice_label]
-    st.info(voice_info["desc"], icon="🗣️")
+        show_foreign = st.checkbox(
+            "🌐 Hiện thêm giọng tiếng Anh / Anh-Anh (tuỳ chọn)",
+            value=False,
+            key="show_foreign_voices",
+            on_change=_on_toggle_foreign_voices,
+        )
+        voice_options = list(VOICES.keys()) if show_foreign else VN_VOICE_KEYS
 
-    st.markdown("##### 📋 Kịch Bản Mẫu Theo Chủ Đề")
-    topic_choice = st.selectbox(
-        "Chọn nhanh một kịch bản mẫu (hoặc tự nhập văn bản)",
-        options=TOPIC_OPTIONS,
-        key="template_choice",
-        on_change=_apply_template,
-        index=0,
-    )
+        voice_label = st.selectbox(
+            "🎤 Chọn giọng đọc",
+            options=voice_options,
+            key="voice_choice",
+            help="Chọn giọng đọc phù hợp với chủ đề nội dung của bạn.",
+        )
+        voice_info = VOICES[voice_label]
+        st.info(voice_info["desc"], icon="🗣️")
+        if not show_foreign:
+            st.caption(
+                "💡 Edge-TTS (Microsoft) hiện chỉ phát hành chính thức **2 giọng tiếng Việt** - "
+                "Nam Minh (nam) và Hoài My (nữ). Đây là giới hạn từ phía Microsoft (chưa có giọng "
+                "Việt thứ 3), không phải giới hạn của ứng dụng. Tick ô trên nếu cần thêm giọng "
+                "tiếng Anh / Anh-Anh."
+            )
 
-    if topic_choice != "✍️ Tự nhập văn bản tự do":
-        st.selectbox(
-            "🗺️ Chọn vùng miền cho kịch bản",
-            options=list(REGIONS.keys()),
-            key="region_choice",
+        st.markdown("##### 📋 Kịch Bản Mẫu Theo Chủ Đề")
+        topic_choice = st.selectbox(
+            "Chọn nhanh một kịch bản mẫu (hoặc tự nhập văn bản)",
+            options=TOPIC_OPTIONS,
+            key="template_choice",
             on_change=_apply_template,
             index=0,
-            help=(
-                "Nội dung kịch bản (địa danh, dòng sông, thành phố...) sẽ được tùy biến theo "
-                "vùng miền bạn chọn. Nghệ An và Huế có kịch bản biên soạn riêng chi tiết; các "
-                "vùng miền khác dùng mẫu chung có thể chỉnh sửa lại."
-            ),
         )
+
+        if topic_choice != "✍️ Tự nhập văn bản tự do":
+            st.selectbox(
+                "🗺️ Chọn vùng miền cho kịch bản",
+                options=list(REGIONS.keys()),
+                key="region_choice",
+                on_change=_apply_template,
+                index=0,
+                help=(
+                    "Nội dung kịch bản (địa danh, dòng sông, thành phố...) sẽ được tùy biến theo "
+                    "vùng miền bạn chọn. Nghệ An và Huế có kịch bản biên soạn riêng chi tiết; các "
+                    "vùng miền khác dùng mẫu chung có thể chỉnh sửa lại."
+                ),
+            )
+
+        st.markdown("---")
+        st.markdown("##### 🎛️ Tùy Chỉnh Âm Thanh")
+
+        rate_value = st.slider(
+            "⚡ Tốc độ đọc (Rate)",
+            min_value=-50,
+            max_value=50,
+            value=0,
+            step=1,
+            format="%d%%",
+            help="Điều chỉnh tốc độ đọc nhanh hoặc chậm hơn so với mặc định.",
+        )
+
+        pitch_value = st.slider(
+            "🎵 Cao độ / Độ trầm (Pitch)",
+            min_value=-20,
+            max_value=20,
+            value=0,
+            step=1,
+            format="%d Hz",
+            help="Điều chỉnh giọng đọc cao hoặc trầm hơn so với mặc định.",
+        )
+
+        st.caption(f"Thông số hiện tại: Rate = **{rate_value:+d}%** | Pitch = **{pitch_value:+d}Hz**")
+
+    # ---------------------------- CỘT PHẢI: NỘI DUNG & KẾT QUẢ ----------------------------
+    with col_content:
+        st.subheader("📝 Nội Dung Kịch Bản")
+
+        text_input = st.text_area(
+            label="Văn bản cần chuyển thành giọng nói",
+            key="script_text",
+            height=320,
+            placeholder="Nhập hoặc dán văn bản của bạn vào đây, hoặc chọn một kịch bản mẫu ở cột bên trái...",
+        )
+
+        char_count = len(text_input.strip())
+        st.caption(f"Số ký tự: {char_count}")
+
+        generate_clicked = st.button(
+            "🚀 Tạo Giọng Đọc Ngay",
+            type="primary",
+            use_container_width=True,
+            disabled=(char_count == 0),
+        )
+
+        if generate_clicked:
+            if char_count == 0:
+                st.warning("⚠️ Vui lòng nhập văn bản trước khi tạo giọng đọc.")
+            else:
+                try:
+                    with st.spinner("🎧 Đang xử lý và tạo giọng đọc, vui lòng chờ trong giây lát..."):
+                        audio_result = generate_voice(
+                            text=text_input,
+                            voice_id=voice_info["id"],
+                            rate_value=rate_value,
+                            pitch_value=pitch_value,
+                        )
+
+                    if audio_result:
+                        st.session_state.audio_bytes = audio_result
+                        st.session_state.last_voice_label = voice_label
+                        st.success("✅ Tạo giọng đọc thành công!")
+                    else:
+                        st.error("❌ Không nhận được dữ liệu âm thanh. Vui lòng thử lại.")
+                except Exception as e:
+                    st.error(f"❌ Đã xảy ra lỗi trong quá trình tạo giọng đọc: {e}")
+
+# =====================================================================================
+# CHẾ ĐỘ 2: HỘI THOẠI NHIỀU GIỌNG (2-3 NGƯỜI NÓI CHUYỆN)
+# =====================================================================================
+else:
+    st.subheader("👥 Tạo Hội Thoại Nhiều Giọng")
+    st.caption(
+        "Tạo một đoạn audio có 2-3 người nói chuyện với nhau, mỗi người một giọng riêng, tự "
+        "động ghép nối liền mạch thành một file MP3 duy nhất - phù hợp làm podcast phỏng vấn, "
+        "hội thoại quảng cáo, hoặc trích đoạn kịch."
+    )
+
+    num_speakers = st.radio(
+        "Số người trong hội thoại", options=[2, 3], horizontal=True, key="num_speakers"
+    )
+
+    default_names = ["Người 1", "Người 2", "Người 3"]
+    # Mặc định ưu tiên 2 giọng Việt; người thứ 3 (nếu có) tái dùng giọng Nam Minh với cao độ
+    # khác để nghe tách biệt hơn - vì Edge-TTS chỉ có 2 giọng tiếng Việt.
+    default_voice_keys = [VN_VOICE_KEYS[0], VN_VOICE_KEYS[1], VN_VOICE_KEYS[0]]
+    default_pitch_offsets = [0, 0, 8]
+
+    speaker_configs = []
+    speaker_cols = st.columns(num_speakers)
+    for i in range(num_speakers):
+        with speaker_cols[i]:
+            st.markdown(f"**Người nói #{i + 1}**")
+            name = st.text_input("Tên", value=default_names[i], key=f"speaker_name_{i}")
+            voice_sel = st.selectbox(
+                "Giọng đọc",
+                options=list(VOICES.keys()),
+                index=list(VOICES.keys()).index(default_voice_keys[i]),
+                key=f"speaker_voice_{i}",
+            )
+            pitch_offset = st.slider(
+                "Cao độ riêng (Hz)",
+                -20,
+                20,
+                default_pitch_offsets[i],
+                key=f"speaker_pitch_{i}",
+                help="Chỉnh lệch cao độ để phân biệt 2 người nói dùng chung 1 giọng gốc.",
+            )
+            speaker_configs.append(
+                {
+                    "name": name.strip() or default_names[i],
+                    "voice_id": VOICES[voice_sel]["id"],
+                    "pitch_offset": pitch_offset,
+                }
+            )
+
+    if num_speakers == 3:
         st.caption(
-            "🎙️ Lưu ý: Edge-TTS hiện chỉ có 2 giọng tiếng Việt (Nam Minh, Hoài My) theo chuẩn "
-            "phát âm miền Bắc - chưa có giọng đọc riêng theo phương ngữ từng vùng."
+            "💡 Vì Edge-TTS chỉ có 2 giọng tiếng Việt, người thứ 3 mặc định dùng lại giọng Nam "
+            "Minh với cao độ lệch để nghe khác biệt hơn. Bạn có thể đổi giọng người thứ 3 sang "
+            "tiếng Anh (mở dropdown Giọng đọc) nếu muốn 3 chất giọng hoàn toàn khác nhau."
         )
 
-    st.markdown("---")
-    st.markdown("##### 🎛️ Tùy Chỉnh Âm Thanh")
-
-    rate_value = st.slider(
-        "⚡ Tốc độ đọc (Rate)",
-        min_value=-50,
-        max_value=50,
-        value=0,
-        step=1,
-        format="%d%%",
-        help="Điều chỉnh tốc độ đọc nhanh hoặc chậm hơn so với mặc định.",
+    st.markdown("##### 📝 Kịch Bản Hội Thoại")
+    st.caption(
+        "Mỗi dòng bắt đầu bằng **đúng tên người nói** (như đặt ở trên) + dấu hai chấm, ví dụ: "
+        f"“{speaker_configs[0]['name']}: Xin chào...”. Dòng không có tên hợp lệ sẽ được "
+        "nối vào lượt nói ngay trước đó."
     )
 
-    pitch_value = st.slider(
-        "🎵 Cao độ / Độ trầm (Pitch)",
-        min_value=-20,
-        max_value=20,
-        value=0,
-        step=1,
-        format="%d Hz",
-        help="Điều chỉnh giọng đọc cao hoặc trầm hơn so với mặc định.",
+    _default_dialogue = (
+        f"{speaker_configs[0]['name']}: Chào bạn, hôm nay chúng ta sẽ nói về chủ đề bất động sản "
+        "tại thành phố Vinh nhé.\n"
+        f"{speaker_configs[1]['name']}: Vâng, đây là chủ đề mình rất quan tâm. Dạo này thị trường "
+        "ở Vinh phát triển mạnh lắm phải không?\n"
+        f"{speaker_configs[0]['name']}: Đúng vậy, đặc biệt là các dự án khu đô thị ven sông Lam, "
+        "được đầu tư bài bản và quy hoạch rất đẹp.\n"
+        f"{speaker_configs[1]['name']}: Nghe hấp dẫn quá, để mình tìm hiểu thêm thông tin chi "
+        "tiết."
+    )
+    if "dialogue_script" not in st.session_state:
+        st.session_state.dialogue_script = _default_dialogue
+
+    dialogue_script = st.text_area(
+        "Nội dung hội thoại",
+        key="dialogue_script",
+        height=280,
+        placeholder="Người 1: ...\nNgười 2: ...",
     )
 
-    st.caption(f"Thông số hiện tại: Rate = **{rate_value:+d}%** | Pitch = **{pitch_value:+d}Hz**")
+    col_rate, col_pitch = st.columns(2)
+    with col_rate:
+        dialogue_rate = st.slider(
+            "⚡ Tốc độ đọc chung (Rate)", -50, 50, 0, step=1, format="%d%%", key="dialogue_rate"
+        )
+    with col_pitch:
+        dialogue_pitch = st.slider(
+            "🎵 Cao độ nền chung (Pitch)", -20, 20, 0, step=1, format="%d Hz", key="dialogue_pitch"
+        )
 
-# ---------------------------- CỘT PHẢI: NỘI DUNG & KẾT QUẢ ----------------------------
-with col_content:
-    st.subheader("📝 Nội Dung Kịch Bản")
-
-    text_input = st.text_area(
-        label="Văn bản cần chuyển thành giọng nói",
-        key="script_text",
-        height=320,
-        placeholder="Nhập hoặc dán văn bản của bạn vào đây, hoặc chọn một kịch bản mẫu ở cột bên trái...",
-    )
-
-    char_count = len(text_input.strip())
-    st.caption(f"Số ký tự: {char_count}")
-
-    generate_clicked = st.button(
-        "🚀 Tạo Giọng Đọc Ngay",
+    dialogue_char_count = len(dialogue_script.strip())
+    generate_dialogue_clicked = st.button(
+        "🚀 Tạo Hội Thoại Ngay",
         type="primary",
         use_container_width=True,
-        disabled=(char_count == 0),
+        disabled=(dialogue_char_count == 0),
     )
 
-    if generate_clicked:
-        if char_count == 0:
-            st.warning("⚠️ Vui lòng nhập văn bản trước khi tạo giọng đọc.")
+    if generate_dialogue_clicked:
+        speaker_names = [s["name"] for s in speaker_configs]
+        turns = parse_dialogue_script(dialogue_script, speaker_names)
+        if not turns:
+            st.warning(
+                "⚠️ Không nhận diện được lượt thoại nào. Mỗi dòng phải bắt đầu bằng đúng tên "
+                "người nói đã đặt ở trên (không phân biệt hoa/thường), theo sau là dấu hai chấm."
+            )
         else:
             try:
-                with st.spinner("🎧 Đang xử lý và tạo giọng đọc, vui lòng chờ trong giây lát..."):
-                    audio_result = generate_voice(
-                        text=text_input,
-                        voice_id=voice_info["id"],
-                        rate_value=rate_value,
-                        pitch_value=pitch_value,
+                with st.spinner(f"🎧 Đang tạo {len(turns)} lượt thoại và ghép thành 1 file..."):
+                    speaker_voice_map = {s["name"]: s["voice_id"] for s in speaker_configs}
+                    speaker_pitch_map = {s["name"]: s["pitch_offset"] for s in speaker_configs}
+                    audio_result = generate_dialogue_audio(
+                        turns,
+                        speaker_voice_map,
+                        speaker_pitch_map,
+                        dialogue_rate,
+                        dialogue_pitch,
                     )
 
                 if audio_result:
                     st.session_state.audio_bytes = audio_result
-                    st.session_state.last_voice_label = voice_label
-                    st.success("✅ Tạo giọng đọc thành công!")
+                    st.session_state.last_voice_label = f"HoiThoai_{num_speakers}Nguoi"
+                    st.success(f"✅ Đã tạo xong hội thoại gồm {len(turns)} lượt nói!")
                 else:
                     st.error("❌ Không nhận được dữ liệu âm thanh. Vui lòng thử lại.")
             except Exception as e:
-                st.error(f"❌ Đã xảy ra lỗi trong quá trình tạo giọng đọc: {e}")
+                st.error(f"❌ Đã xảy ra lỗi khi tạo hội thoại: {e}")
 
-    # ---------------------------- KHU VỰC PHÁT & TẢI FILE ----------------------------
-    if st.session_state.audio_bytes:
-        st.markdown("---")
-        st.subheader("🔊 Nghe Thử & Tải Xuống")
+# =====================================================================================
+# KHU VỰC PHÁT & TẢI FILE (DÙNG CHUNG CHO CẢ 2 CHẾ ĐỘ)
+# =====================================================================================
+if st.session_state.audio_bytes:
+    st.divider()
+    st.subheader("🔊 Nghe Thử & Tải Xuống")
 
-        st.audio(st.session_state.audio_bytes, format="audio/mp3")
+    st.audio(st.session_state.audio_bytes, format="audio/mp3")
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_voice_name = (
-            (st.session_state.last_voice_label or voice_label)
-            .split(" - ")[0]
-            .replace("🇻🇳", "")
-            .replace("🇺🇸", "")
-            .strip()
-            .replace(" ", "_")
-        )
-        file_name = f"GiongDoc_{safe_voice_name}_{timestamp}.mp3"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_voice_name = (
+        (st.session_state.last_voice_label or "GiongDoc")
+        .split(" - ")[0]
+        .replace("🇻🇳", "")
+        .replace("🇺🇸", "")
+        .replace("🇬🇧", "")
+        .strip()
+        .replace(" ", "_")
+    )
+    file_name = f"GiongDoc_{safe_voice_name}_{timestamp}.mp3"
 
-        st.download_button(
-            label="⬇️ Tải File MP3 Về Máy",
-            data=st.session_state.audio_bytes,
-            file_name=file_name,
-            mime="audio/mpeg",
-            use_container_width=True,
-        )
+    st.download_button(
+        label="⬇️ Tải File MP3 Về Máy",
+        data=st.session_state.audio_bytes,
+        file_name=file_name,
+        mime="audio/mpeg",
+        use_container_width=True,
+    )
 
 # =====================================================================================
 # 7. FOOTER
