@@ -406,15 +406,134 @@ def get_script_text(topic_label: str, region_label: str) -> str:
         return CURATED_SCRIPTS[key]
     return _build_generic_script(topic_label, region_label)
 
+
+# =====================================================================================
+# 3b. THẺ CẢM XÚC & KỊCH BẢN MẪU CHO CHẾ ĐỘ HỘI THOẠI
+# =====================================================================================
+# Edge-TTS (bản miễn phí) KHÔNG hỗ trợ SSML "style" (mstts:express-as) như cheerful/sad/
+# angry của Azure Speech Studio trả phí - nếu cố nhét style vào SSML, dịch vụ sẽ trả về audio
+# rác thay vì đọc đúng văn bản (đã kiểm chứng qua báo lỗi thực tế của thư viện edge-tts).
+# Vì vậy, cảm xúc ở đây được MÔ PHỎNG bằng cách biến đổi rate/pitch/volume (3 tham số edge-tts
+# thực sự hỗ trợ) theo từng đoạn văn bản, dựa trên các thẻ [tên_cảm_xúc] người dùng chèn vào
+# kịch bản. Đây KHÔNG phải giọng hát hay hiệu ứng âm thanh thật - Edge-TTS miễn phí chưa có
+# khả năng hát/ngâm nga giai điệu.
+EMOTION_TAGS = {
+    "vui": {"rate": 10, "pitch": 5, "volume": 0, "label": "😄 Vui vẻ"},
+    "hào hứng": {"rate": 16, "pitch": 8, "volume": 8, "label": "🤩 Hào hứng / phấn khích"},
+    "buồn": {"rate": -14, "pitch": -6, "volume": -6, "label": "😢 Buồn / trầm lắng"},
+    "nghẹn ngào": {"rate": -18, "pitch": -8, "volume": -8, "label": "🥲 Nghẹn ngào, xúc động"},
+    "giận": {"rate": 10, "pitch": 3, "volume": 14, "label": "😠 Giận dữ, gắt gỏng"},
+    "ngạc nhiên": {"rate": 6, "pitch": 12, "volume": 6, "label": "😲 Ngạc nhiên"},
+    "thì thầm": {"rate": -10, "pitch": -3, "volume": -35, "label": "🤫 Thì thầm, nhỏ nhẹ"},
+    "trang trọng": {"rate": -6, "pitch": -2, "volume": 0, "label": "🎩 Trang trọng, nghiêm túc"},
+    "cười": {"rate": 14, "pitch": 10, "volume": 6, "label": "😂 Cười / vui đùa"},
+    "khóc": {"rate": -20, "pitch": -8, "volume": -10, "label": "😭 Khóc / nức nở"},
+}
+# 2 thẻ này, nếu đặt riêng ở cuối câu (không có lời nào theo sau), sẽ tự động chèn thêm một
+# câu cảm thán ngắn được đọc bằng chính giọng của người nói đó, mô phỏng tiếng cười / tiếng khóc.
+AUTO_FX_TAGS = {"cười", "khóc"}
+AUTO_FX_PHRASES = {
+    "cười": "Ha ha ha ha!",
+    "khóc": "Hức... hức... hức...",
+}
+
+_EMOTION_TAG_SPLIT_RE = re.compile(r"\[([^\[\]]+)\]")
+
+DIALOGUE_TOPIC_OPTIONS = [
+    "📖 Kể Chuyện Cảm Xúc (vui - buồn - bất ngờ)",
+    "😂 Hài Hước / Tấu Hài",
+    "🏢 Tư Vấn Bất Động Sản",
+    "🎙️ Phỏng Vấn Podcast",
+    "✍️ Tự soạn kịch bản",
+]
+
+
+def _dialogue_names(speaker_names: list) -> list:
+    """Đảm bảo luôn có đủ 3 tên để dựng kịch bản mẫu an toàn dù đang ở chế độ 2 người."""
+    names = [n for n in speaker_names if n]
+    while len(names) < 3:
+        names.append(names[-1] if names else "Người nói")
+    return names
+
+
+def build_dialogue_template(topic_label: str, speaker_names: list) -> str:
+    """Dựng kịch bản hội thoại mẫu có sẵn thẻ cảm xúc, theo chủ đề + số người nói hiện tại."""
+    if topic_label == "✍️ Tự soạn kịch bản" or not speaker_names:
+        return ""
+
+    n = len(speaker_names)
+    a, b, c = _dialogue_names(speaker_names)
+
+    if topic_label == "📖 Kể Chuyện Cảm Xúc (vui - buồn - bất ngờ)":
+        script = (
+            f"{a}: [vui] Cậu biết không, hồi nhỏ tớ hay ra bờ sông ngồi câu cá với ông tớ vào "
+            f"mỗi buổi chiều, vui lắm!\n"
+            f"{b}: [ngạc nhiên] Ồ thật á? Nghe hay quá, kể tiếp đi!\n"
+            f"{a}: Ông hay kể chuyện ngày xưa, rồi hai ông cháu cứ thế mà cười suốt. [cười]\n"
+            f"{b}: [buồn] Nhưng mà... [nghẹn ngào] năm ngoái ông mất rồi, chắc cậu nhớ ông lắm.\n"
+        )
+        if n >= 3:
+            script += (
+                f"{c}: [thì thầm] Ông chắc đang ở trên đó nhìn cậu cười vui mỗi ngày đó.\n"
+                f"{a}: [vui] Cảm ơn cậu, nghe vậy tớ thấy ấm lòng ghê. [cười]\n"
+            )
+        return script
+
+    if topic_label == "😂 Hài Hước / Tấu Hài":
+        script = (
+            f"{a}: [vui] Này, đố cậu biết vì sao con gà lại băng qua đường?\n"
+            f"{b}: [ngạc nhiên] Ơ, sao vậy ta?\n"
+            f"{a}: Vì nó muốn xem thử bên kia đường có ngon hơn không thôi! [cười]\n"
+            f"{b}: Trời ơi, nhạt như nước ốc mà sao tớ vẫn buồn cười! [cười]\n"
+        )
+        if n >= 3:
+            script += (
+                f"{c}: [giận] Hai người thôi giỡn nữa được không, tới giờ họp rồi kìa!\n"
+                f"{a}: [thì thầm] Suỵt, để tớ kể nốt câu cuối đã...\n"
+            )
+        return script
+
+    if topic_label == "🏢 Tư Vấn Bất Động Sản":
+        script = (
+            f"{a}: [trang trọng] Chào anh chị, em là {a}, tư vấn viên dự án khu đô thị ven sông "
+            f"hôm nay ạ.\n"
+            f"{b}: [vui] Chào em, vợ chồng anh chị đang quan tâm căn góc view sông đó.\n"
+            f"{a}: Dạ vâng, căn đó view cực đẹp, [hào hứng] đang có ưu đãi chiết khấu tám phần "
+            f"trăm cho khách đặt cọc sớm ạ!\n"
+            f"{b}: [ngạc nhiên] Ưu đãi tốt vậy à? Vậy chính sách thanh toán thế nào em?\n"
+        )
+        if n >= 3:
+            script += (
+                f"{c}: [thì thầm] Anh ơi, em thấy giá này hợp lý đó, mình chốt luôn đi.\n"
+                f"{a}: [vui] Dạ, để em gửi anh chị bảng giá chi tiết qua Zalo ạ.\n"
+            )
+        return script
+
+    # 🎙️ Phỏng Vấn Podcast
+    script = (
+        f"{a}: [trang trọng] Xin chào mọi người đã quay lại với podcast của tụi mình, hôm nay "
+        f"có khách mời đặc biệt là {b}.\n"
+        f"{b}: [vui] Chào mọi người, rất vui được ở đây hôm nay!\n"
+        f"{a}: Vậy điều gì đã truyền cảm hứng để bạn bắt đầu công việc này?\n"
+        f"{b}: [hào hứng] Ồ, đó là một câu chuyện dài, [cười] nhưng để tớ kể ngắn gọn thôi...\n"
+    )
+    if n >= 3:
+        script += (
+            f"{c}: [ngạc nhiên] Chờ đã, cho tớ hỏi xen một câu được không?\n"
+            f"{a}: [vui] Được chứ, cứ hỏi thoải mái!\n"
+        )
+    return script
+
+
 # =====================================================================================
 # 4. XỬ LÝ BẤT ĐỒNG BỘ - GỌI EDGE-TTS
 # =====================================================================================
-async def _synthesize_speech(text: str, voice_id: str, rate: str, pitch: str) -> bytes:
+async def _synthesize_speech(text: str, voice_id: str, rate: str, pitch: str, volume: str = "+0%") -> bytes:
     """
     Kết nối tới edge-tts.Communicate và stream dữ liệu âm thanh dạng bytes.
     Trả về toàn bộ nội dung audio (định dạng MP3) dưới dạng bytes.
     """
-    communicate = edge_tts.Communicate(text=text, voice=voice_id, rate=rate, pitch=pitch)
+    communicate = edge_tts.Communicate(text=text, voice=voice_id, rate=rate, pitch=pitch, volume=volume)
     audio_buffer = io.BytesIO()
 
     async for chunk in communicate.stream():
@@ -442,22 +561,58 @@ def run_async_task(coro):
             loop.close()
 
 
-def generate_voice(text: str, voice_id: str, rate_value: int, pitch_value: int) -> bytes:
-    """Chuẩn hóa tham số rate/pitch theo định dạng edge-tts yêu cầu rồi gọi TTS."""
+def generate_voice(text: str, voice_id: str, rate_value: int, pitch_value: int, volume_value: int = 0) -> bytes:
+    """Chuẩn hóa tham số rate/pitch/volume theo định dạng edge-tts yêu cầu rồi gọi TTS."""
     rate_str = f"{rate_value:+d}%"
     pitch_str = f"{pitch_value:+d}Hz"
-    return run_async_task(_synthesize_speech(text, voice_id, rate_str, pitch_str))
+    volume_str = f"{volume_value:+d}%"
+    return run_async_task(_synthesize_speech(text, voice_id, rate_str, pitch_str, volume_str))
 
 
 # =====================================================================================
 # 4b. CHẾ ĐỘ HỘI THOẠI NHIỀU GIỌNG (2-3 NGƯỜI NÓI CHUYỆN)
 # =====================================================================================
+def _split_emotion_segments(text: str) -> list:
+    """
+    Tách nội dung một lượt thoại thành các đoạn nhỏ theo thẻ cảm xúc dạng [tên_cảm_xúc].
+    Mỗi thẻ áp dụng cho toàn bộ phần văn bản theo sau nó, cho tới khi gặp thẻ mới hoặc hết câu.
+    Trả về list các dict {"emotion": str|None, "text": str, "auto_fx": bool}.
+    Nếu thẻ [cười]/[khóc] được đặt riêng, không có lời nào theo sau, "auto_fx" = True để chèn
+    một câu cảm thán ngắn tự động (xem AUTO_FX_PHRASES) thay vì bỏ qua đoạn rỗng.
+    """
+    parts = _EMOTION_TAG_SPLIT_RE.split(text)
+    segments = []
+    current_emotion = None
+
+    first = parts[0].strip()
+    if first:
+        segments.append({"emotion": None, "text": first, "auto_fx": False})
+
+    i = 1
+    while i < len(parts):
+        tag_raw = parts[i].strip().lower()
+        following = parts[i + 1] if i + 1 < len(parts) else ""
+        if tag_raw in EMOTION_TAGS:
+            current_emotion = tag_raw
+        following_stripped = following.strip()
+        if following_stripped:
+            segments.append({"emotion": current_emotion, "text": following_stripped, "auto_fx": False})
+        elif current_emotion in AUTO_FX_TAGS:
+            segments.append({"emotion": current_emotion, "text": "", "auto_fx": True})
+        i += 2
+
+    return segments
+
+
 def parse_dialogue_script(script: str, speaker_names: list) -> list:
     """
-    Phân tách kịch bản hội thoại thành danh sách các lượt thoại [(tên_người_nói, nội_dung), ...].
+    Phân tách kịch bản hội thoại thành danh sách các lượt thoại
+    [(tên_người_nói, [danh_sách_đoạn_theo_cảm_xúc]), ...].
     Mỗi lượt thoại mới bắt đầu bằng một dòng có dạng "Tên người nói: nội dung" - tên phải khớp
     (không phân biệt hoa/thường) với một trong các tên người nói đã cấu hình. Các dòng tiếp theo
     không có tiền tố tên hợp lệ sẽ được nối vào lượt thoại hiện tại (cho phép đoạn văn nhiều dòng).
+    Trong nội dung mỗi lượt, các thẻ [tên_cảm_xúc] (vd: [vui], [buồn], [cười]...) được tách ra
+    thành từng đoạn riêng để áp dụng tốc độ/cao độ/âm lượng phù hợp - xem EMOTION_TAGS.
     """
     name_lookup = {name.strip().lower(): name for name in speaker_names if name.strip()}
     turns = []
@@ -468,7 +623,9 @@ def parse_dialogue_script(script: str, speaker_names: list) -> list:
         if current_speaker is not None:
             text = " ".join(line for line in current_lines if line).strip()
             if text:
-                turns.append((current_speaker, text))
+                segments = _split_emotion_segments(text)
+                if segments:
+                    turns.append((current_speaker, segments))
 
     for raw_line in script.splitlines():
         line = raw_line.strip()
@@ -499,21 +656,36 @@ def generate_dialogue_audio(
     rate_value: int,
     base_pitch_value: int,
     pause_ms: int = 450,
+    segment_gap_ms: int = 120,
 ) -> bytes:
     """
-    Tạo giọng đọc cho từng lượt thoại (mỗi lượt dùng giọng + cao độ riêng của người nói đó),
-    sau đó ghép nối tất cả lại thành MỘT file MP3 duy nhất, có khoảng lặng ngắn giữa các lượt
-    để nghe tự nhiên như một cuộc hội thoại thật. Yêu cầu ffmpeg (khai báo trong packages.txt).
+    Tạo giọng đọc cho từng lượt thoại (mỗi lượt dùng giọng + cao độ riêng của người nói đó).
+    Trong mỗi lượt, các đoạn có thẻ cảm xúc (xem _split_emotion_segments/EMOTION_TAGS) được
+    đọc với tốc độ/cao độ/âm lượng riêng để mô phỏng cảm xúc bám sát mạch chuyện hơn. Tất cả
+    được ghép nối lại thành MỘT file MP3 duy nhất, có khoảng lặng ngắn giữa các lượt để nghe tự
+    nhiên như một cuộc hội thoại thật. Yêu cầu ffmpeg (khai báo trong packages.txt).
     """
     combined = AudioSegment.silent(duration=0)
 
-    for speaker, text in turns:
+    for speaker, segments in turns:
         voice_id = speaker_voice_map[speaker]
-        total_pitch = base_pitch_value + speaker_pitch_map.get(speaker, 0)
-        total_pitch = max(-50, min(50, total_pitch))  # giữ trong khoảng an toàn
-        segment_bytes = generate_voice(text, voice_id, rate_value, total_pitch)
-        segment = AudioSegment.from_file(io.BytesIO(segment_bytes), format="mp3")
-        combined += segment + AudioSegment.silent(duration=pause_ms)
+        speaker_pitch_offset = speaker_pitch_map.get(speaker, 0)
+
+        for seg in segments:
+            emotion_cfg = EMOTION_TAGS.get(seg["emotion"], {}) if seg["emotion"] else {}
+            text_to_speak = AUTO_FX_PHRASES.get(seg["emotion"], "") if seg["auto_fx"] else seg["text"]
+            if not text_to_speak.strip():
+                continue
+
+            seg_rate = max(-50, min(50, rate_value + emotion_cfg.get("rate", 0)))
+            seg_pitch = max(-50, min(50, base_pitch_value + speaker_pitch_offset + emotion_cfg.get("pitch", 0)))
+            seg_volume = max(-50, min(50, emotion_cfg.get("volume", 0)))
+
+            segment_bytes = generate_voice(text_to_speak, voice_id, seg_rate, seg_pitch, seg_volume)
+            segment_audio = AudioSegment.from_file(io.BytesIO(segment_bytes), format="mp3")
+            combined += segment_audio + AudioSegment.silent(duration=segment_gap_ms)
+
+        combined += AudioSegment.silent(duration=pause_ms)
 
     buffer = io.BytesIO()
     combined.export(buffer, format="mp3", bitrate="128k")
@@ -751,25 +923,61 @@ else:
             "tiếng Anh (mở dropdown Giọng đọc) nếu muốn 3 chất giọng hoàn toàn khác nhau."
         )
 
+    st.markdown("##### 📋 Kịch Bản Mẫu Hội Thoại Theo Chủ Đề")
+
+    def _apply_dialogue_template():
+        topic = st.session_state.get("dialogue_topic_choice", DIALOGUE_TOPIC_OPTIONS[0])
+        n = st.session_state.get("num_speakers", 2)
+        names = [
+            (st.session_state.get(f"speaker_name_{i}", "") or default_names[i]).strip() or default_names[i]
+            for i in range(n)
+        ]
+        st.session_state.dialogue_script = build_dialogue_template(topic, names)
+        st.session_state.audio_bytes = None
+
+    st.selectbox(
+        "Chọn nhanh một kịch bản hội thoại mẫu (hoặc tự soạn)",
+        options=DIALOGUE_TOPIC_OPTIONS,
+        key="dialogue_topic_choice",
+        on_change=_apply_dialogue_template,
+        index=0,
+    )
+    st.button(
+        "🔄 Tải lại kịch bản mẫu (theo chủ đề & tên/số người hiện tại)",
+        on_click=_apply_dialogue_template,
+        help="Bấm nút này sau khi bạn đổi tên người nói hoặc số người, để nạp lại kịch bản mẫu cho đúng.",
+    )
+
+    if "dialogue_script" not in st.session_state:
+        _apply_dialogue_template()
+
     st.markdown("##### 📝 Kịch Bản Hội Thoại")
     st.caption(
         "Mỗi dòng bắt đầu bằng **đúng tên người nói** (như đặt ở trên) + dấu hai chấm, ví dụ: "
         f"“{speaker_configs[0]['name']}: Xin chào...”. Dòng không có tên hợp lệ sẽ được "
-        "nối vào lượt nói ngay trước đó."
+        "nối vào lượt nói ngay trước đó. Chèn thêm thẻ như `[vui]`, `[buồn]`, `[cười]`... ngay "
+        "trong câu để đổi cảm xúc giọng đọc - xem hướng dẫn bên dưới."
     )
 
-    _default_dialogue = (
-        f"{speaker_configs[0]['name']}: Chào bạn, hôm nay chúng ta sẽ nói về chủ đề bất động sản "
-        "tại thành phố Vinh nhé.\n"
-        f"{speaker_configs[1]['name']}: Vâng, đây là chủ đề mình rất quan tâm. Dạo này thị trường "
-        "ở Vinh phát triển mạnh lắm phải không?\n"
-        f"{speaker_configs[0]['name']}: Đúng vậy, đặc biệt là các dự án khu đô thị ven sông Lam, "
-        "được đầu tư bài bản và quy hoạch rất đẹp.\n"
-        f"{speaker_configs[1]['name']}: Nghe hấp dẫn quá, để mình tìm hiểu thêm thông tin chi "
-        "tiết."
-    )
-    if "dialogue_script" not in st.session_state:
-        st.session_state.dialogue_script = _default_dialogue
+    with st.expander("📌 Hướng dẫn: chèn cảm xúc vào lời thoại"):
+        st.markdown(
+            "Chèn thẻ dạng `[tên_cảm_xúc]` vào giữa câu thoại, giọng đọc sẽ tự đổi tốc độ / cao "
+            "độ / âm lượng cho phần văn bản theo sau, bám sát mạch cảm xúc của câu chuyện hơn. "
+            "Ví dụ:\n\n"
+            "`Lan: [buồn] Hôm nay tớ chẳng vui chút nào... [vui] nhưng gặp cậu tớ thấy khá hơn rồi!`"
+        )
+        for key, cfg in EMOTION_TAGS.items():
+            st.caption(f"`[{key}]` — {cfg['label']}")
+        st.caption(
+            "💡 Thẻ `[cười]` hoặc `[khóc]` đặt riêng, không có lời nào theo sau, sẽ tự động chèn "
+            "thêm một câu cảm thán ngắn (đọc bằng chính giọng người đó) để mô phỏng tiếng cười / "
+            "tiếng khóc.\n\n"
+            "⚠️ Đây là mô phỏng cảm xúc bằng cách đổi tốc độ/cao độ/âm lượng của giọng đọc có sẵn "
+            "- KHÔNG phải giọng hát hay hiệu ứng âm thanh thật. Microsoft Edge-TTS bản miễn phí "
+            "chưa hỗ trợ hát hoặc ngâm nga giai điệu thực sự (thử nghiệm cho thấy chèn SSML "
+            "\"style\" như cheerful/sad của Azure trả phí sẽ làm audio bị lỗi, không đọc đúng "
+            "văn bản), nên tính năng này dừng ở mức mô phỏng bằng tốc độ/cao độ/âm lượng."
+        )
 
     dialogue_script = st.text_area(
         "Nội dung hội thoại",
@@ -805,6 +1013,15 @@ else:
                 "người nói đã đặt ở trên (không phân biệt hoa/thường), theo sau là dấu hai chấm."
             )
         else:
+            used_speakers = {spk for spk, _ in turns}
+            missing_speakers = [name for name in speaker_names if name not in used_speakers]
+            if missing_speakers:
+                st.warning(
+                    "⚠️ (Những) người nói sau không xuất hiện trong kịch bản (không có dòng nào "
+                    f"bắt đầu đúng bằng tên của họ, có thể do gõ sai tên/thiếu dấu hai chấm): "
+                    f"{', '.join(missing_speakers)}. Audio dưới đây sẽ THIẾU giọng của (những) "
+                    "người này - kiểm tra lại kịch bản nếu muốn đủ số người."
+                )
             try:
                 with st.spinner(f"🎧 Đang tạo {len(turns)} lượt thoại và ghép thành 1 file..."):
                     speaker_voice_map = {s["name"]: s["voice_id"] for s in speaker_configs}
